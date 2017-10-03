@@ -946,6 +946,9 @@ grid pixels */
                 const Model *model, const void *arg, const bool ztest,
                 std::vector<RaytraceResult> &results);
 
+  /** trace a ray, but don't stop on the first hit. */
+  RaytraceResult RaytraceThroughWalls(const Ray &ray);
+
   /** Enlarge the bounding volume to include this point */
   inline void Extend(point3_t pt);
 
@@ -2653,6 +2656,71 @@ public:
 
     void Update(ModelRanger *rgr);
     void Visualize(Vis *vis, ModelRanger *rgr) const;
+    std::string String() const;
+    void Load(Worldfile *wf, int entity);
+  };
+
+  /** returns a const reference to a vector of range and reflectance samples */
+  const std::vector<Sensor> &GetSensors() const { return sensors; }
+  /** returns a mutable reference to a vector of range and reflectance samples */
+  std::vector<Sensor> &GetSensorsMutable() { return sensors; }
+  void LoadSensor(Worldfile *wf, int entity);
+
+private:
+  std::vector<Sensor> sensors;
+
+protected:
+  virtual void Startup();
+  virtual void Shutdown();
+  virtual void Update();
+};
+
+//class ModelWifiRanger : public ModelRanger {
+class ModelWifiRanger : public Model {
+public:
+  ModelWifiRanger(World *world, Model *parent, const std::string &type);
+  virtual ~ModelWifiRanger();
+
+  virtual void Print(char *prefix) const;
+
+  class Vis : public Visualizer {
+  public:
+    static Option showArea;
+    static Option showStrikes;
+    static Option showFov;
+    static Option showBeams;
+    static Option showTransducers;
+
+    explicit Vis(World *world);
+    virtual ~Vis(void) {}
+    virtual void Visualize(Model *mod, Camera *cam);
+  } vis;
+
+  class Sensor {
+  public:
+    Pose pose;
+    Size size;
+    Bounds range;
+    radians_t fov;
+    double angle_noise; //< variance for ranger angle
+    double range_noise; //< variance for range readings
+    double range_noise_const; //< variance for constant noise (not depending on range)
+    unsigned int sample_count;
+    Color color;
+
+    std::vector<meters_t> ranges;
+    std::vector<double> intensities;
+    std::vector<double> bearings;
+
+    Sensor()
+        : pose(0, 0, 0, 0), size(0.02, 0.02, 0.02), // teeny transducer
+          range(0.0, 5.0), fov(0.1), angle_noise(0.0), range_noise(0.0), range_noise_const(0.0),
+          sample_count(1), color(Color(0, 0, 1, 0.15)), ranges(), intensities(), bearings()
+    {
+    }
+
+    void Update(ModelWifiRanger *rgr);
+    void Visualize(Vis *vis, ModelWifiRanger *rgr) const;
     std::string String() const;
     void Load(Worldfile *wf, int entity);
   };

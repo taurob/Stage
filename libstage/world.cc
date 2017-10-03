@@ -294,14 +294,16 @@ void World::LoadBlock(Worldfile *wf, int entity)
 void World::LoadSensor(Worldfile *wf, int entity)
 {
   // lookup the group in which this was defined
-  ModelRanger *rgr(dynamic_cast<ModelRanger *>(models_by_wfentity[wf->GetEntityParent(entity)]));
-
-  // todo verify that the parent is indeed a ranger
-
-  if (!rgr)
-    PRINT_ERR("block has no ranger model for a parent");
-
-  rgr->LoadSensor(wf, entity);
+  ModelRanger *rgr = dynamic_cast<ModelRanger *>(models_by_wfentity[wf->GetEntityParent(entity)]);
+  if (rgr)
+  {
+    rgr->LoadSensor(wf, entity);
+  }
+  else
+  {
+    ModelWifiRanger *wrgr = dynamic_cast<ModelWifiRanger *>(models_by_wfentity[wf->GetEntityParent(entity)]); 
+    wrgr->LoadSensor(wf, entity);
+  }
 }
 
 Model *World::CreateModel(Model *parent, const std::string &typestr)
@@ -331,7 +333,7 @@ Model *World::CreateModel(Model *parent, const std::string &typestr)
     exit(1);
   }
 
-  // printf( "created model %s\n", mod->Token() );
+  printf( "created model %s\n", mod->Token() );
 
   return mod;
 }
@@ -957,6 +959,266 @@ RaytraceResult World::Raytrace(const Ray &r)
       }
     }
     // rt_cells.push_back( point_int_t( globx, globy ));
+  }
+
+  return result;
+}
+
+RaytraceResult World::RaytraceThroughWalls(const Ray &r)
+{
+  // rt_cells.clear();
+  // rt_candidate_cells.clear();
+
+  // initialize result for return
+  RaytraceResult result(r.origin, NULL, Color(), r.range);
+
+  // our global position in (floating point) cell coordinates
+  double globx(r.origin.x * ppm);
+  double globy(r.origin.y * ppm);
+
+  // record our starting position
+  const double startx(globx);
+  const double starty(globy);
+
+  // eliminate a potential divide by zero
+  const double angle(r.origin.a == 0.0 ? 1e-12 : r.origin.a);
+  const double sina(sin(angle));
+  const double cosa(cos(angle));
+  const double tana(sina / cosa); // approximately tan(angle) but faster
+
+  // the x and y components of the ray (these need to be doubles, or a
+  // very weird and rare bug is produced)
+  const double dx(ppm * r.range * cosa);
+  const double dy(ppm * r.range * sina);
+
+  // fast integer line 3d algorithm adapted from Cohen's code from
+  // Graphics Gems IV
+  const int32_t sx(sgn(dx));
+  const int32_t sy(sgn(dy));
+  const int32_t ax(std::abs(dx));
+  const int32_t ay(std::abs(dy));
+  const int32_t bx(2 * ax);
+  const int32_t by(2 * ay);
+  int32_t exy(ay - ax); // difference between x and y distances
+  int32_t n(ax + ay); // the manhattan distance to the goal cell
+  int32_t last_hit_n = -1; // the 'n' value of the last hit
+
+  // the distances between region crossings in X and Y
+  const double xjumpx(sx * REGIONWIDTH);
+  const double xjumpy(sx * REGIONWIDTH * tana);
+  const double yjumpx(sy * REGIONWIDTH / tana);
+  const double yjumpy(sy * REGIONWIDTH);
+
+  // manhattan distance between region crossings in X and Y
+  const double xjumpdist(fabs(xjumpx) + fabs(xjumpy));
+  const double yjumpdist(fabs(yjumpx) + fabs(yjumpy));
+
+  const unsigned int layer((updates + 1) % 2);
+
+  // these are updated as we go along the ray
+  double xcrossx(0), xcrossy(0);
+  double ycrossx(0), ycrossy(0);
+  double distX(0), distY(0);
+  bool calculatecrossings(true);
+
+  std::vector<meters_t> hits;
+
+  // Stage spends up to 95% of its time in this loop! It would be
+  // neater with more function calls encapsulating things, but even
+  // inline calls have a noticeable (2-3%) effect on performance.
+
+  // several useful asserts are commented out so that Stage is not too
+  // slow in debug builds. Add them in if chasing a suspected raytrace bug
+  while (n > 0) // while we are still not at the ray end
+  {
+    SuperRegion *sr(GetSuperRegion(point_int_t(GETSREG(globx), GETSREG(globy))));
+    Region *reg(sr ? sr->GetRegion(GETREG(globx), GETREG(globy)) : NULL);
+
+    if (reg && reg->count) // if the region contains any objects
+    {
+      // assert( reg->cells.size() );
+
+      // invalidate the region crossing points used to jump over
+      // empty regions
+      calculatecrossings = true;
+
+      // convert from global cell to local cell coords
+      int32_t cx(GETCELL(globx));
+      int32_t cy(GETCELL(globy));
+
+      // since reg->count was non-zero, we expect this pointer to be good
+      Cell *c(&reg->cells[cx + cy * REGIONWIDTH]);
+
+      // while within the bounds of this region and while some ray remains
+      // we'll tweak the cell pointer directly to move around quickly
+      while ((cx >= 0) && (cx < REGIONWIDTH) && (cy >= 0) && (cy < REGIONWIDTH) && n > 0) {
+        FOR_EACH (it, c->blocks[layer]) {
+          Block *block(*it);
+          assert(block);
+
+          // skip if not in the right z range
+          if (r.ztest && (r.origin.z < block->global_z.min || r.origin.z > block->global_z.max))
+            continue;
+
+          // test the predicate we were passed
+          if ((*r.func)(&block->group->mod, r.mod, r.arg)) {
+            // a hit!
+
+            if (n != last_hit_n - 1)
+            {
+              meters_t range = 0;
+              if (ax > ay) // faster than the equivalent hypot() call
+                range = fabs((globx - startx) / cosa) / ppm;
+              else
+                range = fabs((globy - starty) / sina) / ppm;
+              hits.push_back(range);
+            }
+
+            last_hit_n = n;
+          }
+        }
+
+        // increment our cell in the correct direction
+        if (exy < 0) // we're iterating along X
+        {
+          globx += sx; // global coordinate
+          exy += by;
+          c += sx; // move the cell left or right
+          cx += sx; // cell coordinate for bounds checking
+        } else // we're iterating along Y
+        {
+          globy += sy; // global coordinate
+          exy -= bx;
+          c += sy * REGIONWIDTH; // move the cell up or down
+          cy += sy; // cell coordinate for bounds checking
+        }
+        --n; // decrement the manhattan distance remaining
+
+        // rt_cells.push_back( point_int_t( globx, globy ));
+      }
+      // printf( "leaving populated region\n" );
+    } else // jump over the empty region
+    {
+      // on the first run, and when we've been iterating over
+      // cells, we need to calculate the next crossing of a region
+      // boundary along each axis
+      if (calculatecrossings) {
+        calculatecrossings = false;
+
+        // find the coordinate in cells of the bottom left corner of
+        // the current region
+        const int32_t ix(globx);
+        const int32_t iy(globy);
+        double regionx(ix / REGIONWIDTH * REGIONWIDTH);
+        double regiony(iy / REGIONWIDTH * REGIONWIDTH);
+        if ((globx < 0) && (ix % REGIONWIDTH))
+          regionx -= REGIONWIDTH;
+        if ((globy < 0) && (iy % REGIONWIDTH))
+          regiony -= REGIONWIDTH;
+
+        // calculate the distance to the edge of the current region
+        const double xdx(sx < 0 ? regionx - globx - 1.0 : // going left
+                             regionx + REGIONWIDTH - globx); // going right
+        const double xdy(xdx * tana);
+
+        const double ydy(sy < 0 ? regiony - globy - 1.0 : // going down
+                             regiony + REGIONWIDTH - globy); // going up
+        const double ydx(ydy / tana);
+
+        // these stored hit points are updated as we go along
+        xcrossx = globx + xdx;
+        xcrossy = globy + xdy;
+
+        ycrossx = globx + ydx;
+        ycrossy = globy + ydy;
+
+        // find the distances to the region crossing points
+        // manhattan distance is faster than using hypot()
+        distX = fabs(xdx) + fabs(xdy);
+        distY = fabs(ydx) + fabs(ydy);
+      }
+
+      if (distX < distY) // crossing a region boundary left or right
+      {
+        // move to the X crossing
+        globx = xcrossx;
+        globy = xcrossy;
+
+        n -= distX; // decrement remaining manhattan distance
+
+        // calculate the next region crossing
+        xcrossx += xjumpx;
+        xcrossy += xjumpy;
+
+        distY -= distX;
+        distX = xjumpdist;
+
+        // rt_candidate_cells.push_back( point_int_t( xcrossx, xcrossy ));
+      } else // crossing a region boundary up or down
+      {
+        // move to the X crossing
+        globx = ycrossx;
+        globy = ycrossy;
+
+        n -= distY; // decrement remaining manhattan distance
+
+        // calculate the next region crossing
+        ycrossx += yjumpx;
+        ycrossy += yjumpy;
+
+        distX -= distY;
+        distY = yjumpdist;
+
+        // rt_candidate_cells.push_back( point_int_t( ycrossx, ycrossy ));
+      }
+    }
+    // rt_cells.push_back( point_int_t( globx, globy ));
+  }
+
+//  // Filter out hits that are near to each other. (Caused
+//  // when the raytracing hits the same wall multiple times.)
+//  {
+//    const meters_t min_distance = 0.1;
+//
+//    std::vector<meters_t> filtered;
+//
+//    for (size_t i = 1; i < hits.size(); i++)
+//    {
+//      if ((hits[i] - hits[i - 1]) < min_distance)
+//      {
+//        continue;
+//      }
+//
+//      filtered.push_back(hits[i]);
+//    }
+//
+//    hits = filtered;
+//  }
+
+  hits.push_back(2 * r.range);
+
+  // For each wall that gets hit, this value
+  // is substracted from the wifi range.
+  const meters_t attenuation = 1.0;
+
+  meters_t remaining_range = r.range;
+
+  for (size_t i = 0; i < hits.size(); i++)
+  {
+    const meters_t last_hit = (i == 0) ? 0.0 : hits[i - 1];
+
+    // Distance from the last hit to this.
+    const meters_t distance = hits[i] - last_hit;
+
+    if (remaining_range < distance)
+    {
+      result.range = last_hit + remaining_range;
+      break;
+    }
+
+    remaining_range -= distance;
+    remaining_range -= attenuation;
+    remaining_range = std::max(0.0, remaining_range);
   }
 
   return result;

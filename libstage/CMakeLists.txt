@@ -25,6 +25,7 @@ set( stageSrcs
 	model_lightindicator.cc
 	model_position.cc
 	model_ranger.cc
+	model_wifiranger.cc
 	option.cc
 	powerpack.cc
 	region.cc
