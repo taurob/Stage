@@ -964,7 +964,7 @@ RaytraceResult World::Raytrace(const Ray &r)
   return result;
 }
 
-RaytraceResult World::RaytraceThroughWalls(const Ray &r)
+RaytraceResult World::RaytraceThroughWalls(const Ray &r, std::set<ModelWifiRanger*>& found_wifis)
 {
   // rt_cells.clear();
   // rt_candidate_cells.clear();
@@ -1021,7 +1021,12 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r)
   double distX(0), distY(0);
   bool calculatecrossings(true);
 
-  std::vector<meters_t> hits;
+  struct hit {
+    meters_t range;
+    Model *mod;
+  };
+
+  std::vector<hit> hits;
 
   // Stage spends up to 95% of its time in this loop! It would be
   // neater with more function calls encapsulating things, but even
@@ -1071,7 +1076,7 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r)
                 range = fabs((globx - startx) / cosa) / ppm;
               else
                 range = fabs((globy - starty) / sina) / ppm;
-              hits.push_back(range);
+              hits.push_back({range, &(block->group->mod)});
             }
 
             last_hit_n = n;
@@ -1195,7 +1200,7 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r)
 //    hits = filtered;
 //  }
 
-  hits.push_back(2 * r.range);
+  hits.push_back({2 * r.range, NULL});
 
   // For each wall that gets hit, this value
   // is substracted from the wifi range.
@@ -1205,15 +1210,21 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r)
 
   for (size_t i = 0; i < hits.size(); i++)
   {
-    const meters_t last_hit = (i == 0) ? 0.0 : hits[i - 1];
+    const meters_t last_hit = (i == 0) ? 0.0 : hits[i - 1].range;
 
     // Distance from the last hit to this.
-    const meters_t distance = hits[i] - last_hit;
+    const meters_t distance = hits[i].range - last_hit;
 
     if (remaining_range < distance)
     {
       result.range = last_hit + remaining_range;
       break;
+    }
+
+    ModelWifiRanger* wr = dynamic_cast<ModelWifiRanger*>(hits[i].mod);
+    if (wr)
+    {
+      found_wifis.insert(wr);
     }
 
     remaining_range -= distance;

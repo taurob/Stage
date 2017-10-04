@@ -107,11 +107,6 @@ ModelWifiRanger::ModelWifiRanger(World *world, Model *parent, const std::string 
 
   this->SetColor(RANGER_CONFIG_COLOR);
 
-  // remove the polygon: ranger has no body
-  this->ClearBlocks();
-
-  this->SetGeom(Geom(Pose(), RANGER_SIZE));
-
   AddVisualizer(&vis, true);
 }
 
@@ -199,12 +194,9 @@ template <class Scalar_t> Scalar_t generateGaussianNoise(Scalar_t variance)
 
 void ModelWifiRanger::Update(void)
 {
-  printf("ModelWifiRanger::Update\n");
-
   // raytrace new range data for all sensors
   FOR_EACH (it, sensors)
   {
-    printf("updating sensor\n");
     it->Update(this);
   }
 
@@ -235,10 +227,12 @@ void ModelWifiRanger::Sensor::Update(ModelWifiRanger *mod)
   // set up a ray to trace
   Ray ray(mod, rayorg, range.max, ranger_match, NULL, true);
 
+  std::set<ModelWifiRanger*> found_wifis;
+
   // trace the ray, incrementing its heading for each sample
   for (size_t t(0); t < sample_count; t++) {
     float savedAngle = ray.origin.a;
-    const RaytraceResult res = mod->world->RaytraceThroughWalls(ray);
+    const RaytraceResult res = mod->world->RaytraceThroughWalls(ray, found_wifis);
     ray.origin.a = savedAngle;
 
     ranges[t] = res.range;
@@ -249,6 +243,8 @@ void ModelWifiRanger::Sensor::Update(ModelWifiRanger *mod)
     // point the ray to the next angle:
     ray.origin.a += sample_incr;
   }
+
+  printf("found %d wifis\n", found_wifis.size());
 }
 
 std::string ModelWifiRanger::Sensor::String() const
@@ -263,8 +259,6 @@ typedef struct { GLfloat x; GLfloat y; } glpoint_t;
   
 void ModelWifiRanger::Sensor::Visualize(ModelWifiRanger::Vis *vis, ModelWifiRanger *rgr) const
 {
-printf("ModelWifiRanger::Sensor::Visualize\n");
-
   // glTranslatef( 0,0, ranger->GetGeom().size.z/2.0 ); // shoot the ranger beam
   // out at the right height
 

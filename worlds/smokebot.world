@@ -9,7 +9,7 @@ resolution 0.02
 
 # configure the GUI window
 window (
-  size [ 678.000 730.000 ]
+  size [ 678.000 630.000 ]
   center [ 0.122 -0.386 ]
   scale 31.082
 
@@ -27,7 +27,6 @@ define laserscanner_sensor sensor (
   size [ 0.025 0.025 0.025 ]
   range [ 0 2.0 ]
 
-  # needed for stage to close the circle
   fov 60
 
   color_rgba [ 0 0 1 0.5 ]
@@ -92,6 +91,50 @@ robot (
   name "roboter"
   pose [ 1 1 0 0 ]
   ctrl "wander"
+  localization "gps"
+  localization_origin [ 0 0 0 0 ]
+)
+
+define repeater position (
+  size [ 0.5 0.5 0.5 ]
+
+  block (
+    points 4
+    point[0] [ -0.25 -0.25 ]
+    point[1] [  0.25 -0.25 ]
+    point[2] [  0.25  0.25 ]
+    point[3] [ -0.25  0.25 ]
+    z [ 0 0.1 ]
+  )
+
+  color_rgba [ 0 1 0 0.5 ]
+
+  wifiscanner (
+    name "wifi_adapter"
+
+    pose [ 0 0 0 0 ]
+
+    ctrl "wifi"
+  )
+)
+
+repeater (
+  name "rep0"
+  pose [ -10 -12 0 0 ]
+  localization "gps"
+  localization_origin [ 0 0 0 0 ]
+)
+
+repeater (
+  name "rep1"
+  pose [  -8 -12 0 0 ]
+  localization "gps"
+  localization_origin [ 0 0 0 0 ]
+)
+
+repeater (
+  name "rep2"
+  pose [  -6 -12 0 0 ]
   localization "gps"
   localization_origin [ 0 0 0 0 ]
 )

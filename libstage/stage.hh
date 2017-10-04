@@ -84,6 +84,7 @@ class OptionsDlg;
 class Camera;
 class FileManager;
 class Option;
+class ModelWifiRanger;
 
 typedef Model *(*creator_t)(World *, Model *, const std::string &type);
 
@@ -947,7 +948,7 @@ grid pixels */
                 std::vector<RaytraceResult> &results);
 
   /** trace a ray, but don't stop on the first hit. */
-  RaytraceResult RaytraceThroughWalls(const Ray &ray);
+  RaytraceResult RaytraceThroughWalls(const Ray &ray, std::set<ModelWifiRanger*>&);
 
   /** Enlarge the bounding volume to include this point */
   inline void Extend(point3_t pt);
