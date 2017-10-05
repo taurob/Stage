@@ -1665,7 +1665,20 @@ class Model : public Ancestor {
   friend class Ray;
   friend class ModelFiducial;
 
+public:
+  void set_name(std::string name)
+  {
+    _name = name;
+  }
+
+  std::string name() const
+  {
+    return _name;
+  }
+
 private:
+  std::string _name;
+
   /** the number of models instatiated - used to assign unique sequential IDs */
   static uint32_t count;
   static std::map<id_t, Model *> modelsbyid;

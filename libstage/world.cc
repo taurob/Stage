@@ -270,6 +270,7 @@ void World::AddModel(Model *mod)
 void World::AddModelName(Model *mod, const std::string &name)
 {
   models_by_name[name] = mod;
+  mod->set_name(name);
 }
 
 void World::RemoveModel(Model *mod)
@@ -964,6 +965,17 @@ RaytraceResult World::Raytrace(const Ray &r)
   return result;
 }
 
+struct wifi_hit {
+  meters_t range;
+  ModelWifiRanger* mod;
+
+  wifi_hit(meters_t range, ModelWifiRanger* mod)
+    : range(range)
+    , mod(mod)
+  {
+  }
+};
+
 RaytraceResult World::RaytraceThroughWalls(const Ray &r, std::set<ModelWifiRanger*>& found_wifis)
 {
   // rt_cells.clear();
@@ -1021,12 +1033,8 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r, std::set<ModelWifiRange
   double distX(0), distY(0);
   bool calculatecrossings(true);
 
-  struct hit {
-    meters_t range;
-    Model *mod;
-  };
-
-  std::vector<hit> hits;
+  std::vector<wifi_hit> wifi_hits;
+  std::vector<meters_t> hits;
 
   // Stage spends up to 95% of its time in this loop! It would be
   // neater with more function calls encapsulating things, but even
@@ -1076,7 +1084,16 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r, std::set<ModelWifiRange
                 range = fabs((globx - startx) / cosa) / ppm;
               else
                 range = fabs((globy - starty) / sina) / ppm;
-              hits.push_back({range, &(block->group->mod)});
+
+              ModelWifiRanger* wifi = dynamic_cast<ModelWifiRanger*>(&(block->group->mod));
+              if (wifi)
+              {
+                wifi_hits.push_back(wifi_hit(range, wifi));
+              }
+              else
+              {
+                hits.push_back(range);
+              }
             }
 
             last_hit_n = n;
@@ -1200,7 +1217,7 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r, std::set<ModelWifiRange
 //    hits = filtered;
 //  }
 
-  hits.push_back({2 * r.range, NULL});
+  hits.push_back(2 * r.range);
 
   // For each wall that gets hit, this value
   // is substracted from the wifi range.
@@ -1208,12 +1225,13 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r, std::set<ModelWifiRange
 
   meters_t remaining_range = r.range;
 
+  // Calculate the distance, taking the walls into account.
   for (size_t i = 0; i < hits.size(); i++)
   {
-    const meters_t last_hit = (i == 0) ? 0.0 : hits[i - 1].range;
+    const meters_t last_hit = (i == 0) ? 0.0 : hits[i - 1];
 
     // Distance from the last hit to this.
-    const meters_t distance = hits[i].range - last_hit;
+    const meters_t distance = hits[i] - last_hit;
 
     if (remaining_range < distance)
     {
@@ -1221,15 +1239,21 @@ RaytraceResult World::RaytraceThroughWalls(const Ray &r, std::set<ModelWifiRange
       break;
     }
 
-    ModelWifiRanger* wr = dynamic_cast<ModelWifiRanger*>(hits[i].mod);
-    if (wr)
-    {
-      found_wifis.insert(wr);
-    }
-
     remaining_range -= distance;
     remaining_range -= attenuation;
     remaining_range = std::max(0.0, remaining_range);
+  }
+
+  // Add all wifis that are in range.
+  for (size_t i = 0; i < wifi_hits.size(); i++)
+  {
+    if (wifi_hits[i].range > result.range)
+    {
+      // exit early
+      break;
+    }
+
+    found_wifis.insert(wifi_hits[i].mod);
   }
 
   return result;

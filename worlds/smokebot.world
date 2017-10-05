@@ -19,7 +19,7 @@ window (
 floorplan (
   bitmap "bitmaps/autolab.png"
   size [ 20 20 1 ]
-  boundary 1
+  boundary 0
   name "lab"
 )
 
@@ -27,7 +27,7 @@ define laserscanner_sensor sensor (
   size [ 0.025 0.025 0.025 ]
   range [ 0 2.0 ]
 
-  fov 60
+  fov 180
 
   color_rgba [ 0 0 1 0.5 ]
   samples 60

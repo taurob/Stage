@@ -203,6 +203,17 @@ void ModelWifiRanger::Update(void)
   Model::Update();
 }
 
+static std::string parent_name(const ModelWifiRanger *mod)
+{
+  Model* parent = mod->Parent();
+  if (!parent)
+  {
+    return "";
+  }
+
+  return parent->name();
+}
+
 void ModelWifiRanger::Sensor::Update(ModelWifiRanger *mod)
 {
   // these sizes change very rarely, so this is very cheap
@@ -244,7 +255,17 @@ void ModelWifiRanger::Sensor::Update(ModelWifiRanger *mod)
     ray.origin.a += sample_incr;
   }
 
-  printf("found %d wifis\n", found_wifis.size());
+  if (found_wifis.size())
+  {
+    printf("'%s' connected to:\n", parent_name(mod).c_str());
+
+    std::set<ModelWifiRanger*>::iterator it;
+    for (it = found_wifis.begin(); it != found_wifis.end(); ++it)
+    {
+      printf("'%s'\n", parent_name(*it).c_str());
+    }
+  }
+
 }
 
 std::string ModelWifiRanger::Sensor::String() const
