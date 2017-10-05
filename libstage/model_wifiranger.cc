@@ -192,17 +192,6 @@ template <class Scalar_t> Scalar_t generateGaussianNoise(Scalar_t variance)
   return sqrt(variance * rand1) * cos(rand2);
 }
 
-void ModelWifiRanger::Update(void)
-{
-  // raytrace new range data for all sensors
-  FOR_EACH (it, sensors)
-  {
-    it->Update(this);
-  }
-
-  Model::Update();
-}
-
 static std::string parent_name(const ModelWifiRanger *mod)
 {
   Model* parent = mod->Parent();
@@ -212,6 +201,27 @@ static std::string parent_name(const ModelWifiRanger *mod)
   }
 
   return parent->name();
+}
+
+void ModelWifiRanger::Update(void)
+{
+  _wifis_in_range.clear();
+
+  // raytrace new range data for all sensors
+  FOR_EACH (it, sensors)
+  {
+    it->Update(this);
+  }
+
+  Model::Update();
+
+  printf("'%s' connected to:\n", parent_name(this).c_str());
+
+  std::set<ModelWifiRanger*>::iterator it;
+  for (it = _wifis_in_range.begin(); it != _wifis_in_range.end(); ++it)
+  {
+    printf("'%s'\n", parent_name(*it).c_str());
+  }
 }
 
 void ModelWifiRanger::Sensor::Update(ModelWifiRanger *mod)
@@ -255,17 +265,7 @@ void ModelWifiRanger::Sensor::Update(ModelWifiRanger *mod)
     ray.origin.a += sample_incr;
   }
 
-  if (found_wifis.size())
-  {
-    printf("'%s' connected to:\n", parent_name(mod).c_str());
-
-    std::set<ModelWifiRanger*>::iterator it;
-    for (it = found_wifis.begin(); it != found_wifis.end(); ++it)
-    {
-      printf("'%s'\n", parent_name(*it).c_str());
-    }
-  }
-
+  mod->add_wifis(found_wifis);
 }
 
 std::string ModelWifiRanger::Sensor::String() const

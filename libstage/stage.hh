@@ -2745,7 +2745,20 @@ public:
   std::vector<Sensor> &GetSensorsMutable() { return sensors; }
   void LoadSensor(Worldfile *wf, int entity);
 
+  const std::set<ModelWifiRanger*>& wifis_in_range() const
+  {
+    return _wifis_in_range;
+  }
+
+  void add_wifis(const std::set<ModelWifiRanger*>& wifis)
+  {
+    _wifis_in_range.insert(wifis.begin(), wifis.end());
+  }
+
 private:
+
+  std::set<ModelWifiRanger*> _wifis_in_range;
+
   std::vector<Sensor> sensors;
 
 protected:
