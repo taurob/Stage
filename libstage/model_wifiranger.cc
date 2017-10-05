@@ -192,17 +192,6 @@ template <class Scalar_t> Scalar_t generateGaussianNoise(Scalar_t variance)
   return sqrt(variance * rand1) * cos(rand2);
 }
 
-static std::string parent_name(const ModelWifiRanger *mod)
-{
-  Model* parent = mod->Parent();
-  if (!parent)
-  {
-    return "";
-  }
-
-  return parent->name();
-}
-
 void ModelWifiRanger::Update(void)
 {
   _wifis_in_range.clear();
@@ -214,14 +203,6 @@ void ModelWifiRanger::Update(void)
   }
 
   Model::Update();
-
-  printf("'%s' connected to:\n", parent_name(this).c_str());
-
-  std::set<ModelWifiRanger*>::iterator it;
-  for (it = _wifis_in_range.begin(); it != _wifis_in_range.end(); ++it)
-  {
-    printf("'%s'\n", parent_name(*it).c_str());
-  }
 }
 
 void ModelWifiRanger::Sensor::Update(ModelWifiRanger *mod)

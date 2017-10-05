@@ -78,9 +78,31 @@ extern "C" int Init(Model *mod, CtrlArgs *args)
   return 0; // ok
 }
 
+static std::string parent_name(const ModelWifiRanger *mod)
+{
+  Model* parent = mod->Parent();
+  if (!parent)
+  {
+    return "";
+  }
+
+  return parent->name();
+}
+
 // inspect the ranger data and decide what to do
 int LaserUpdate(Model *mod, struct callback_data* data)
 {
+  ModelWifiRanger* mwr = dynamic_cast<ModelWifiRanger*>(mod);
+  if (mwr->wifis_in_range().size())
+  {
+    printf("'%s' connected to:\n", parent_name(mwr).c_str());
+
+    std::set<ModelWifiRanger*>::iterator it;
+    for (it = mwr->wifis_in_range().begin(); it != mwr->wifis_in_range().end(); ++it)
+    {
+      printf("'%s'\n", parent_name(*it).c_str());
+    }
+  }
 //  // get the data
 //  const std::vector<meters_t> &scan = robot->laser->GetSensors()[0].ranges;
 //  uint32_t sample_count = scan.size();
